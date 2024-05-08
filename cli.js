@@ -26,23 +26,40 @@ const argsProjectIndex = args.findIndex(arg =>
 const argsProjectValue =
   argsProjectIndex !== -1 ? args[argsProjectIndex + 1] : undefined
 
-const files = args.filter(file => /\.(ts|tsx)$/.test(file))
-if (files.length === 0) {
-  process.exit(0)
-}
-
-const remainingArgsToForward = args.slice().filter(arg => !files.includes(arg))
-
-if (argsProjectIndex !== -1) {
-  remainingArgsToForward.splice(argsProjectIndex, 2)
-}
-
 // Load existing config
 const tsconfigPath = argsProjectValue || resolveFromRoot('tsconfig.json')
 const tsconfigContent = fs.readFileSync(tsconfigPath).toString()
 // Use 'eval' to read the JSON as regular JavaScript syntax so that comments are allowed
 let tsconfig = {}
 eval(`tsconfig = ${tsconfigContent}`)
+
+const handleJsFiles = tsconfig.compilerOptions.allowJs && tsconfig.compilerOptions.checkJs
+
+// if we allow AND check js files, test for js|jsx extensions as well, otherwise they will get passed
+// along with other arguments and we will get the error that -p cannot be used alongside with the
+// files option
+const files = handleJsFiles
+    ? args.filter(file => /\.(ts|tsx|js|jsx)$/.test(file))
+    : args.filter(file => /\.(ts|tsx)$/.test(file));
+
+if (files.length === 0) {
+  process.exit(0)
+}
+
+const remainingArgsToForward = args.slice().filter(arg => {
+    // discard js filenames if we do not handle js files
+    if (!handleJsFiles && /\.(js|jsx)$/.test(arg)) {
+        return false;
+    }
+
+    return !files.includes(arg)
+})
+
+if (argsProjectIndex !== -1) {
+  remainingArgsToForward.splice(argsProjectIndex, 2)
+}
+
+
 
 // Write a temp config file
 const tmpTsconfigPath = resolveFromRoot(`tsconfig.${randomChars()}.json`)
